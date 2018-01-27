@@ -13,24 +13,27 @@ public:
 
   map<string, int> lane_direction = {{"PLCL", 1}, {"LCL", 1}, {"LCR", -1}, {"PLCR", -1}};
 
+  double id;
+  int lane;
   double d;
   double s;
   double x;
   double y;
   double yaw;
   double speed;
-  vector<double> previous_path_x;
-  vector<double> previous_path_y;
   string state;
 
   Vehicle();
 
-  Vehicle(double d, double s, double x, double y, double yaw, double speed, string state="CS",
-      vector<double> previous_path_x, vector<double> previous_path_y);
+  Vehicle(double id, int lane, double d, double s, double x, double y, double yaw, double speed, string state="KL");
 
   virtual ~Vehicle();
 
-  vector<Vehicle> constant_speed_trajectory();
+  vector<string> successor_states();
+  Vehicle generate_trajectory(string state, vector<Vehicle> predictions);
+  Vehicle choose_next_state(vector<Vehicle> predictions);
+  vector<Vehicle> get_vehicle_ahead(vector<Vehicle> predictions);
+  Vehicle keep_lane_trajectory(vector<Vehicle> predictions);
 };
 
 #endif
