@@ -9,6 +9,7 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
 #include "spline.h"
+#include "vehicle.h"
 
 using namespace std;
 
@@ -148,6 +149,31 @@ double getD(int lane) {
   return lane_width/2 + (double)lane*lane_width;
 }
 
+int getLane(double d) {
+  return (int)((d - lane_width/2)/lane_width);
+}
+
+vector<Vehicle> generate_predictions(vector<vector<double>> sensor_fusion, int horizon,
+    const vector<double> &maps_s, const vector<double> &maps_x, const vector<double> &maps_y) {
+
+  vector<Vehicle> predictions;
+  for (int i = 0; i < sensor_fusion.size(); i++) {
+    double id = sensor_fusion[i][0];
+    double vx = sensor_fusion[i][3];
+    double vy = sensor_fusion[i][4];
+    double s  = sensor_fusion[i][5];
+    double d  = sensor_fusion[i][6];
+    double speed = sqrt(pow(vx,2) + pow(vy,2));
+
+    double pred_s = s + (double)horizon * 0.02 * speed;
+    vector<double> pred_xy = getXY(pred_s, d, maps_s, maps_x, maps_y);
+
+    predictions.push_back(Vehicle(id, getLane(d), d, pred_s, pred_xy[0], pred_xy[1], 0, speed, "KL"));
+  }
+
+  return predictions;
+}
+
 int main() {
   uWS::Hub h;
 
@@ -162,12 +188,6 @@ int main() {
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
   double max_s = 6945.554;
-
-  double ref_speed = 0;
-  double max_speed = 49.5/2.24;
-  double target_speed = 0;
-  int target_lane = 1;
-  string state = "CS";
 
   ifstream in_map_(map_file_.c_str(), ifstream::in);
 
@@ -190,6 +210,12 @@ int main() {
     map_waypoints_dx.push_back(d_x);
     map_waypoints_dy.push_back(d_y);
   }
+
+  double ref_speed = 0;
+  double max_speed = 49.5/2.24;
+  double target_speed = 0;
+  int target_lane = 1;
+  string state = "KL";
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &ref_speed, &target_lane, &target_speed, &max_speed, &state]
       (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
@@ -228,41 +254,29 @@ int main() {
           // Sensor Fusion Data, a list of all other cars on the same side of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
 
-          double target_d = getD(target_lane);
-
           int prev_size = previous_path_x.size();
 
-          target_speed = 49.5/2.24;
-
-          double slowest_speed = target_speed;
-          for (int i = 0; i < sensor_fusion.size(); i++) {
-            vector<double> car = sensor_fusion[i];
-
-            double id = car[0];
-            double x = car[1];
-            double y = car[2];
-            double vx = car[3];
-            double vy = car[4];
-            double s = car[5];
-            double d = car[6];
-
-            double speed = sqrt(pow(vx,2) + pow(vy,2));
-            double s_projected = s + prev_size * 0.02 * speed;
-
-            // Is there a car in my lane ahead
-            if (d < target_d + 2 && d > target_d - 2) {
-              if (s_projected > car_s && (s - car_s) < 25) {
-                double new_speed = 0.95 * speed;
-                target_speed = new_speed;
-                target_lane = (target_lane + 1) % 3;
-              }
-            }
+          if (prev_size > 0) {
+            car_s = end_path_s;
           }
 
           // Create the spline with an initial tangent path for smooth transition
           double ref_x = car_x;
           double ref_y = car_y;
           double ref_yaw = deg2rad(car_yaw);
+
+          // Generate predictions for surrounding vehicles
+          // Generate trajectories for each successor state
+          // Evaluate cost of each generated trajectory
+          // Realize the new state
+
+          Vehicle ego = Vehicle(0, target_lane, car_d, car_s, car_x, car_y, ref_yaw, car_speed, state);
+          vector<Vehicle> predictions = generate_predictions(sensor_fusion, prev_size, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          ego = ego.choose_next_state(predictions);
+
+          target_speed = ego.speed;
+          target_lane = ego.lane;
+
           vector<double> ptsx;
           vector<double> ptsy;
 
@@ -286,14 +300,13 @@ int main() {
             ptsy.push_back(ref_y);
           }
 
-          for (int next_s = 50; next_s <= 100; next_s += 50) {
+          for (int next_s = 20; next_s <= 60; next_s += 20) {
             vector<double> wp = getXY(car_s + next_s, getD(target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
             ptsx.push_back(wp[0]);
             ptsy.push_back(wp[1]);
           }
 
           for (int i = 0; i < ptsx.size(); i++) {
-
             double shift_x = ptsx[i] - ref_x;
             double shift_y = ptsy[i] - ref_y;
 
@@ -313,17 +326,12 @@ int main() {
             next_y_vals.push_back(previous_path_y[i]);
           }
 
-          // Generate the waypoints by advancing the car's s.
-          // Then get it's XY but use X with the spline function to get Y
-          if (ref_speed < target_speed) {
+          if (ref_speed < target_speed)
             ref_speed += 0.1;
-          }
-          if (ref_speed > target_speed) {
+          if (ref_speed > target_speed)
             ref_speed -= 0.1;
-          }
-          if (ref_speed > max_speed) {
+          if (ref_speed > max_speed)
             ref_speed = max_speed;
-          }
 
           double target_x = 50;
           double target_y = s(target_x);
@@ -350,7 +358,6 @@ int main() {
 
           //this_thread::sleep_for(chrono::milliseconds(1000));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-
         }
       } else {
         // Manual driving
