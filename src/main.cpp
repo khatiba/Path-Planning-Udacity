@@ -8,6 +8,7 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
+#include "spline.h"
 
 using namespace std;
 
@@ -17,6 +18,7 @@ using json = nlohmann::json;
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
+double lane_width = 4.0;
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -142,6 +144,10 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
   return {x,y};
 }
 
+double getD(int lane) {
+  return lane_width/2 + (double)lane*lane_width;
+}
+
 int main() {
   uWS::Hub h;
 
@@ -216,13 +222,71 @@ int main() {
           // Sensor Fusion Data, a list of all other cars on the same side of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
 
-          json msgJson;
+          double ref_speed = 49.5 / 2.24; // mph -> m/s
 
+          // Create the spline with an initial tangent path for smooth transition
+          vector<double> ptsx;
+          vector<double> ptsy;
+
+          double ref_x = car_x;
+          double ref_y = car_y;
+          double ref_yaw = deg2rad(car_yaw);
+
+          int prev_size = previous_path_x.size();
+
+          if (prev_size < 2) {
+            ptsx.push_back(car_x);
+            ptsy.push_back(car_y);
+            ptsx.push_back(car_x + cos(deg2rad(car_yaw)));
+            ptsy.push_back(car_y + sin(deg2rad(car_yaw)));
+          } else {
+            ref_x = previous_path_x[prev_size-1];
+            ref_y = previous_path_y[prev_size-1];
+
+            double ref_x2 = previous_path_x[prev_size-2];
+            double ref_y2 = previous_path_y[prev_size-2];
+
+            ref_yaw = atan2(ref_y - ref_y2, ref_x - ref_x2);
+
+            ptsx.push_back(ref_x2);
+            ptsy.push_back(ref_y2);
+            ptsx.push_back(ref_x);
+            ptsy.push_back(ref_y);
+          }
+
+          vector<double> ref_wp = getFrenet(ref_x, ref_y, ref_yaw, map_waypoints_x, map_waypoints_y);
+          double ref_s = ref_wp[0];
+
+          for (int next_s = 30; next_s <= 90; next_s += 30) {
+            vector<double> wp = getXY(ref_s + next_s, car_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            ptsx.push_back(wp[0]);
+            ptsy.push_back(wp[1]);
+          }
+
+          tk::spline s;
+          s.set_points(ptsx, ptsy);
+
+          // start with all remaining points from previous path
           vector<double> next_x_vals;
           vector<double> next_y_vals;
 
+          for (int i = 0; i < prev_size; i++) {
+            next_x_vals.push_back(previous_path_x[i]);
+            next_y_vals.push_back(previous_path_y[i]);
+          }
 
-          // TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
+          // Generate the waypoints by advancing the car's s.
+          // Then get it's XY but use X with the spline function to get Y
+          double inc_s = 0.02*ref_speed;
+
+          for (int i = 0; i < 50 - prev_size; i++) {
+            double new_s = ref_s + inc_s*(i+1);
+            vector<double> wp = getXY(new_s, car_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            next_x_vals.push_back(wp[0]);
+            next_y_vals.push_back(s(wp[0]));
+          }
+
+          json msgJson;
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
