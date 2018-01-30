@@ -237,30 +237,36 @@ int main() {
           if (prev_size < 2) {
             ptsx.push_back(car_x);
             ptsy.push_back(car_y);
-            ptsx.push_back(car_x + cos(deg2rad(car_yaw)));
-            ptsy.push_back(car_y + sin(deg2rad(car_yaw)));
+            ptsx.push_back(car_x + cos(ref_yaw));
+            ptsy.push_back(car_y + sin(ref_yaw));
           } else {
             ref_x = previous_path_x[prev_size-1];
             ref_y = previous_path_y[prev_size-1];
 
-            double ref_x2 = previous_path_x[prev_size-2];
-            double ref_y2 = previous_path_y[prev_size-2];
+            double ref_x_prev = previous_path_x[prev_size-2];
+            double ref_y_prev = previous_path_y[prev_size-2];
 
-            ref_yaw = atan2(ref_y - ref_y2, ref_x - ref_x2);
+            ref_yaw = atan2(ref_y - ref_y_prev, ref_x - ref_x_prev);
 
-            ptsx.push_back(ref_x2);
-            ptsy.push_back(ref_y2);
+            ptsx.push_back(ref_x_prev);
+            ptsy.push_back(ref_y_prev);
             ptsx.push_back(ref_x);
             ptsy.push_back(ref_y);
           }
 
-          vector<double> ref_wp = getFrenet(ref_x, ref_y, ref_yaw, map_waypoints_x, map_waypoints_y);
-          double ref_s = ref_wp[0];
-
           for (int next_s = 30; next_s <= 90; next_s += 30) {
-            vector<double> wp = getXY(ref_s + next_s, car_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            vector<double> wp = getXY(car_s + next_s, car_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
             ptsx.push_back(wp[0]);
             ptsy.push_back(wp[1]);
+          }
+
+          for (int i = 0; i < ptsx.size(); i++) {
+
+            double shift_x = ptsx[i] - ref_x;
+            double shift_y = ptsy[i] - ref_y;
+
+            ptsx[i] = shift_x * cos(0 - ref_yaw) - shift_y * sin(0 - ref_yaw);
+            ptsy[i] = shift_x * sin(0 - ref_yaw) + shift_y * cos(0 - ref_yaw);
           }
 
           tk::spline s;
@@ -277,13 +283,21 @@ int main() {
 
           // Generate the waypoints by advancing the car's s.
           // Then get it's XY but use X with the spline function to get Y
-          double inc_s = 0.02*ref_speed;
+          double target_x = 30;
+          double target_y = s(target_x);
+          double target_dist = sqrt(pow(target_x,2) + pow(target_y,2));
+          double N = target_dist/(0.02*ref_speed);
+          double distance_inc = target_x/N;
 
           for (int i = 0; i < 50 - prev_size; i++) {
-            double new_s = ref_s + inc_s*(i+1);
-            vector<double> wp = getXY(new_s, car_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-            next_x_vals.push_back(wp[0]);
-            next_y_vals.push_back(s(wp[0]));
+            double next_x = distance_inc * (i+1);
+            double next_y = s(next_x);
+
+            double map_next_x = ref_x + next_x * cos(ref_yaw) - next_y * sin(ref_yaw);
+            double map_next_y = ref_y + next_x * sin(ref_yaw) + next_y * cos(ref_yaw);
+
+            next_x_vals.push_back(map_next_x);
+            next_y_vals.push_back(map_next_y);
           }
 
           json msgJson;
