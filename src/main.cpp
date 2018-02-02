@@ -163,6 +163,12 @@ int main() {
   // The max s value before wrapping around the track back to 0
   double max_s = 6945.554;
 
+  double ref_speed = 0;
+  double max_speed = 49.5/2.24;
+  double target_speed = 0;
+  int target_lane = 1;
+  string state = "CS";
+
   ifstream in_map_(map_file_.c_str(), ifstream::in);
 
   string line;
@@ -185,7 +191,7 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy]
+  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &ref_speed, &target_lane, &target_speed, &max_speed, &state]
       (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -222,17 +228,43 @@ int main() {
           // Sensor Fusion Data, a list of all other cars on the same side of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
 
-          double ref_speed = 49.5 / 2.24; // mph -> m/s
+          double target_d = getD(target_lane);
+
+          int prev_size = previous_path_x.size();
+
+          target_speed = 49.5/2.24;
+
+          double slowest_speed = target_speed;
+          for (int i = 0; i < sensor_fusion.size(); i++) {
+            vector<double> car = sensor_fusion[i];
+
+            double id = car[0];
+            double x = car[1];
+            double y = car[2];
+            double vx = car[3];
+            double vy = car[4];
+            double s = car[5];
+            double d = car[6];
+
+            double speed = sqrt(pow(vx,2) + pow(vy,2));
+            double s_projected = s + prev_size * 0.02 * speed;
+
+            // Is there a car in my lane ahead
+            if (d < target_d + 2 && d > target_d - 2) {
+              if (s_projected > car_s && (s - car_s) < 25) {
+                double new_speed = 0.95 * speed;
+                target_speed = new_speed;
+                target_lane = (target_lane + 1) % 3;
+              }
+            }
+          }
 
           // Create the spline with an initial tangent path for smooth transition
-          vector<double> ptsx;
-          vector<double> ptsy;
-
           double ref_x = car_x;
           double ref_y = car_y;
           double ref_yaw = deg2rad(car_yaw);
-
-          int prev_size = previous_path_x.size();
+          vector<double> ptsx;
+          vector<double> ptsy;
 
           if (prev_size < 2) {
             ptsx.push_back(car_x);
@@ -254,8 +286,8 @@ int main() {
             ptsy.push_back(ref_y);
           }
 
-          for (int next_s = 30; next_s <= 90; next_s += 30) {
-            vector<double> wp = getXY(car_s + next_s, car_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          for (int next_s = 50; next_s <= 100; next_s += 50) {
+            vector<double> wp = getXY(car_s + next_s, getD(target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
             ptsx.push_back(wp[0]);
             ptsy.push_back(wp[1]);
           }
@@ -283,7 +315,17 @@ int main() {
 
           // Generate the waypoints by advancing the car's s.
           // Then get it's XY but use X with the spline function to get Y
-          double target_x = 30;
+          if (ref_speed < target_speed) {
+            ref_speed += 0.1;
+          }
+          if (ref_speed > target_speed) {
+            ref_speed -= 0.1;
+          }
+          if (ref_speed > max_speed) {
+            ref_speed = max_speed;
+          }
+
+          double target_x = 50;
           double target_y = s(target_x);
           double target_dist = sqrt(pow(target_x,2) + pow(target_y,2));
           double N = target_dist/(0.02*ref_speed);
