@@ -70,15 +70,13 @@ vector<string> Vehicle::successor_states() {
 
 Vehicle Vehicle::generate_trajectory(string state, vector<Vehicle> predictions) {
   Vehicle trajectory;
-  /* if (state.compare("CS") == 0) { */
-    /* trajectory = constant_speed_trajectory(); */
-  /* } else if (state.compare("KL") == 0) { */
+  if (state.compare("KL") == 0) {
     trajectory = keep_lane_trajectory(predictions);
-  /* } else if (state.compare("LCL") == 0 || state.compare("LCR") == 0) { */
-  /*   trajectory = lane_change_trajectory(state, predictions); */
-  /* } else if (state.compare("PLCL") == 0 || state.compare("PLCR") == 0) { */
-  /*   trajectory = prep_lane_change_trajectory(state, predictions); */
-  /* } */
+  } else if (state.compare("LCL") == 0 || state.compare("LCR") == 0) {
+    trajectory = lane_change_trajectory(state, predictions);
+  } else if (state.compare("PLCL") == 0 || state.compare("PLCR") == 0) {
+    trajectory = prep_lane_change_trajectory(state, predictions);
+  }
   return trajectory;
 }
 
@@ -86,7 +84,7 @@ Vehicle Vehicle::keep_lane_trajectory(vector<Vehicle> predictions) {
   vector<double> lane_kinematics = get_lane_kinematics(this->lane, predictions);
   double speed = lane_kinematics[0];
 
-  return Vehicle(this->id, this->lane, this->d, this->s, this->x, this->y, this->yaw, speed, this->state);
+  return Vehicle(this->id, this->lane, this->d, this->s, this->x, this->y, this->yaw, speed, "KL");
 }
 
 Vehicle Vehicle::prep_lane_change_trajectory(string state, vector<Vehicle> predictions) {
@@ -104,7 +102,28 @@ Vehicle Vehicle::prep_lane_change_trajectory(string state, vector<Vehicle> predi
 
   double speed = best_kinematics[0];
 
-  return Vehicle(this->id, this->lane, this->d, this->s, this->x, this->y, this->yaw, speed, this->state);
+  return Vehicle(this->id, this->lane, this->d, this->s, this->x, this->y, this->yaw, speed, state);
+}
+
+Vehicle Vehicle::lane_change_trajectory(string state, vector<Vehicle> predictions) {
+  int next_lane = this->lane + this->lane_direction[state];
+
+  for (int i = 0; i < predictions.size(); i++) {
+    Vehicle pred = predictions[i];
+
+    if (next_lane != pred.lane) { // not in the target lane
+      continue;
+    }
+
+    if (this->s < pred.s + 3 && this->s > pred.s - 3) { // Car blocking the lane
+      return this->keep_lane_trajectory(predictions);
+    }
+  }
+
+  vector<double> next_lane_kinematics = get_lane_kinematics(next_lane, predictions);
+  double speed = next_lane_kinematics[0];
+
+  return Vehicle(this->id, next_lane, this->d, this->s, this->x, this->y, this->yaw, speed, state);
 }
 
 /*
