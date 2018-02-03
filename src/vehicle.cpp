@@ -64,7 +64,7 @@ vector<string> Vehicle::successor_states() {
       states.push_back("LCR");
     }
   }
-  //If state is "LCL" or "LCR", then just return "KL"
+  // If state is "LCL" or "LCR", then just return "KL"
   return states;
 }
 
@@ -82,47 +82,89 @@ Vehicle Vehicle::generate_trajectory(string state, vector<Vehicle> predictions) 
   return trajectory;
 }
 
+Vehicle Vehicle::keep_lane_trajectory(vector<Vehicle> predictions) {
+  vector<double> lane_kinematics = get_lane_kinematics(this->lane, predictions);
+  double speed = lane_kinematics[0];
+
+  return Vehicle(this->id, this->lane, this->d, this->s, this->x, this->y, this->yaw, speed, this->state);
+}
+
+Vehicle Vehicle::prep_lane_change_trajectory(string state, vector<Vehicle> predictions) {
+  int next_lane = this->lane + this->lane_direction[state];
+
+  vector<double> curr_lane_kinematics = get_lane_kinematics(this->lane, predictions);
+  vector<double> next_lane_kinematics = get_lane_kinematics(next_lane, predictions);
+
+  vector<double> best_kinematics;
+  if (curr_lane_kinematics[0] < next_lane_kinematics[0]) {
+    best_kinematics = curr_lane_kinematics;
+  } else {
+    best_kinematics = next_lane_kinematics;
+  }
+
+  double speed = best_kinematics[0];
+
+  return Vehicle(this->id, this->lane, this->d, this->s, this->x, this->y, this->yaw, speed, this->state);
+}
+
 /*
  * Go the speed limit or track the car in front if it's in range
  */
-Vehicle Vehicle::keep_lane_trajectory(vector<Vehicle> predictions) {
-  double new_speed = 49.5/2.24;
+vector<double> Vehicle::get_lane_kinematics(int lane, vector<Vehicle> predictions) {
+  double speed_limit = 22; // 22m/s ~ 40mph
+  double lane_speed = speed_limit; // Go the speed limit if nothing ahead
 
-  vector<Vehicle> vehicle_ahead = get_vehicle_ahead(predictions);
+  vector<Vehicle> vehicle_ahead = get_vehicle_ahead(lane, predictions);
   if (vehicle_ahead.size() > 0) {
-    if (vehicle_ahead[0].s - this->s < 25) {
-      new_speed = 0.95 * vehicle_ahead[0].speed; // may need more slowing
+    if (vehicle_ahead[0].s - this->s < 20) { // slow down closer/farther from vehicle
+      lane_speed = 0.95 * vehicle_ahead[0].speed; // slightly slower than leading vehicle
     }
   }
 
-  return Vehicle(this->id, this->lane, this->d, this->s, this->x, this->y, this->yaw, new_speed, this->state);
+  // TODO: Check the car behind? Maybe not necessary as long as it tracks ego speed.
+
+  return {lane_speed};
 }
 
 /*
  * Use predictions to find any car that's in this lane ahead
  */
-vector<Vehicle> Vehicle::get_vehicle_ahead(vector<Vehicle> predictions) {
-  Vehicle found_vehicle;
+vector<Vehicle> Vehicle::get_vehicle_ahead(int lane, vector<Vehicle> predictions) {
+  vector<Vehicle> vehicle_ahead;
 
-  bool found = false;
-  double min_s = numeric_limits<double>::max();
+  double min_dist = numeric_limits<double>::max();
   for (int i = 0; i < predictions.size(); i++) {
     Vehicle pred = predictions[i];
-    // Is there a car in my lane ahead
-    if (pred.d < this->d + 2 && pred.d > this->d - 2) {
-      double dist_s = (pred.s - this->s);
-      if (this->s < pred.s && dist_s < min_s) {
-        min_s = dist_s;
-        found = true;
-        found_vehicle = pred;
-      }
+    if (pred.lane != lane || this->s > pred.s) { // other lane or behind ego
+      continue;
+    }
+
+    double dist = pred.s - this->s;
+    if (dist < min_dist) {
+      min_dist = dist;
+      vehicle_ahead = {pred};
     }
   }
 
-  if (found) {
-    return {found_vehicle};
-  }
-
-  return {};
+  return vehicle_ahead;
 }
 
+vector<Vehicle> Vehicle::get_vehicle_behind(int lane, vector<Vehicle> predictions) {
+  vector<Vehicle> vehicle_behind;
+
+  double min_dist = numeric_limits<double>::max();
+  for (int i = 0; i < predictions.size(); i++) {
+    Vehicle pred = predictions[i];
+    if (pred.lane != lane || this->s < pred.s) { // other lane or leading ego
+      continue;
+    }
+
+    double dist = this->s - pred.s;
+    if (dist < min_dist) {
+      min_dist = dist;
+      vehicle_behind = {pred};
+    }
+  }
+
+  return vehicle_behind;
+}

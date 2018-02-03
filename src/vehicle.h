@@ -30,10 +30,16 @@ public:
   virtual ~Vehicle();
 
   vector<string> successor_states();
-  Vehicle generate_trajectory(string state, vector<Vehicle> predictions);
+
+  vector<double> get_lane_kinematics(int lane, vector<Vehicle> predictions);
+
   Vehicle choose_next_state(vector<Vehicle> predictions);
-  vector<Vehicle> get_vehicle_ahead(vector<Vehicle> predictions);
+  Vehicle generate_trajectory(string state, vector<Vehicle> predictions);
   Vehicle keep_lane_trajectory(vector<Vehicle> predictions);
+  Vehicle prep_lane_change_trajectory(string state, vector<Vehicle> predictions);
+
+  vector<Vehicle> get_vehicle_ahead(int lane, vector<Vehicle> predictions);
+  vector<Vehicle> get_vehicle_behind(int lane, vector<Vehicle> predictions);
 };
 
 #endif

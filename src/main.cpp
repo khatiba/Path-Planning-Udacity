@@ -270,7 +270,7 @@ int main() {
           // Evaluate cost of each generated trajectory
           // Realize the new state
 
-          Vehicle ego = Vehicle(0, target_lane, car_d, car_s, car_x, car_y, ref_yaw, car_speed, state);
+          Vehicle ego = Vehicle(0, target_lane, car_d, car_s, ref_x, ref_y, ref_yaw, car_speed, state);
           vector<Vehicle> predictions = generate_predictions(sensor_fusion, prev_size, map_waypoints_s, map_waypoints_x, map_waypoints_y);
           ego = ego.choose_next_state(predictions);
 
