@@ -10,6 +10,7 @@
 #include "json.hpp"
 #include "spline.h"
 #include "vehicle.h"
+#include "utils.h"
 
 using namespace std;
 
@@ -150,7 +151,7 @@ double getD(int lane) {
 }
 
 int getLane(double d) {
-  return (int)((d - lane_width/2)/lane_width);
+  return (int)round((d - lane_width/2)/lane_width);
 }
 
 vector<Vehicle> generate_predictions(vector<vector<double>> sensor_fusion, int horizon,
@@ -212,12 +213,11 @@ int main() {
   }
 
   double ref_speed = 0;
-  double max_speed = 49.5/2.24;
   double target_speed = 0;
   int target_lane = 1;
   string state = "KL";
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &ref_speed, &target_lane, &target_speed, &max_speed, &state]
+  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &ref_speed, &target_lane, &target_speed, &state]
       (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -243,6 +243,7 @@ int main() {
           double car_d = j[1]["d"];
           double car_yaw = j[1]["yaw"];
           double car_speed = j[1]["speed"];
+          car_speed /= 2.24;
 
           // Previous path data given to the Planner
           auto previous_path_x = j[1]["previous_path_x"];
@@ -265,17 +266,13 @@ int main() {
           double ref_y = car_y;
           double ref_yaw = deg2rad(car_yaw);
 
-          // Generate predictions for surrounding vehicles
-          // Generate trajectories for each successor state
-          // Evaluate cost of each generated trajectory
-          // Realize the new state
-
           Vehicle ego = Vehicle(0, target_lane, car_d, car_s, ref_x, ref_y, ref_yaw, car_speed, state);
           vector<Vehicle> predictions = generate_predictions(sensor_fusion, prev_size, map_waypoints_s, map_waypoints_x, map_waypoints_y);
           ego = ego.choose_next_state(predictions);
 
           target_speed = ego.speed;
           target_lane = ego.lane;
+          state = ego.state;
 
           vector<double> ptsx;
           vector<double> ptsy;
@@ -300,7 +297,7 @@ int main() {
             ptsy.push_back(ref_y);
           }
 
-          for (int next_s = 20; next_s <= 60; next_s += 20) {
+          for (int next_s = 30; next_s <= 90; next_s += 30) {
             vector<double> wp = getXY(car_s + next_s, getD(target_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
             ptsx.push_back(wp[0]);
             ptsy.push_back(wp[1]);
@@ -330,8 +327,8 @@ int main() {
             ref_speed += 0.1;
           if (ref_speed > target_speed)
             ref_speed -= 0.1;
-          if (ref_speed > max_speed)
-            ref_speed = max_speed;
+          if (ref_speed > speed_limit)
+            ref_speed = speed_limit;
 
           double target_x = 50;
           double target_y = s(target_x);
