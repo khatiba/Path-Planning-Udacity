@@ -28,8 +28,8 @@ double inefficiency_cost(const Vehicle & vehicle, const Vehicle & trajectory, co
     intended_lane = intended_lane + lane_direction[trajectory.state];
   }
 
-  vector<double> intended_kinematics = get_lane_kinematics(vehicle, intended_lane, predictions);
-  vector<double> final_kinematics = get_lane_kinematics(vehicle, final_lane, predictions);
+  vector<double> intended_kinematics = get_lane_kinematics(vehicle, intended_lane, 40.0, predictions);
+  vector<double> final_kinematics = get_lane_kinematics(vehicle, final_lane, 40.0, predictions);
 
   double intended_speed = intended_kinematics[0];
   double final_speed = final_kinematics[0];

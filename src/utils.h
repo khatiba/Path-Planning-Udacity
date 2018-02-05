@@ -7,7 +7,6 @@
 using namespace std;
 
 const double lane_width = 4.0;
-
 const double speed_limit = 22.25;
 
 constexpr double pi() { return M_PI; }
@@ -32,7 +31,7 @@ vector<Vehicle> generate_predictions(vector<vector<double>> sensor_fusion, int h
 vector<Vehicle> get_vehicle_ahead(const Vehicle & vehicle, int lane, vector<Vehicle> predictions);
 vector<Vehicle> get_vehicle_behind(const Vehicle & vehicle, int lane, vector<Vehicle> predictions);
 
-vector<double> get_lane_kinematics(const Vehicle & vehicle, int lane, vector<Vehicle> predictions);
+vector<double> get_lane_kinematics(const Vehicle & vehicle, int lane, double look_ahead_dist, vector<Vehicle> predictions);
 
 #endif
 

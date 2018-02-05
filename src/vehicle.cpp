@@ -37,9 +37,8 @@ Vehicle Vehicle::choose_next_state(vector<Vehicle> predictions) {
 
     double cost = calculate_cost(*this, trajectory, predictions);
 
-    cout << state << ": " << round(cost) << endl;
+    /* cout << state << ": " << round(cost) << endl; */
 
-    /* cout << setw(5) << successors[i] << round(cost) << endl; */
     if (cost < min_cost) {
       min_cost = cost;
       best_trajectory = trajectory;
@@ -91,7 +90,7 @@ Vehicle Vehicle::generate_trajectory(string state, vector<Vehicle> predictions) 
 }
 
 Vehicle Vehicle::keep_lane_trajectory(vector<Vehicle> predictions) {
-  vector<double> lane_kinematics = get_lane_kinematics(*this, this->lane, predictions);
+  vector<double> lane_kinematics = get_lane_kinematics(*this, this->lane, 20.0, predictions);
   double speed = lane_kinematics[0];
 
   return Vehicle(this->id, this->lane, this->d, this->s, this->x, this->y, this->yaw, speed, "KL");
@@ -100,8 +99,8 @@ Vehicle Vehicle::keep_lane_trajectory(vector<Vehicle> predictions) {
 Vehicle Vehicle::prep_lane_change_trajectory(string state, vector<Vehicle> predictions) {
   int next_lane = this->lane + this->lane_direction[state];
 
-  vector<double> curr_lane_kinematics = get_lane_kinematics(*this, this->lane, predictions);
-  vector<double> next_lane_kinematics = get_lane_kinematics(*this, next_lane, predictions);
+  vector<double> curr_lane_kinematics = get_lane_kinematics(*this, this->lane, 20.0, predictions);
+  vector<double> next_lane_kinematics = get_lane_kinematics(*this, next_lane, 20.0, predictions);
 
   vector<double> best_kinematics;
   if (curr_lane_kinematics[0] < next_lane_kinematics[0]) {
@@ -126,12 +125,12 @@ Vehicle Vehicle::lane_change_trajectory(string state, vector<Vehicle> prediction
     }
 
     if (this->s < pred.s + 3 && this->s > pred.s - 35) { // Car blocking the lane
-      cout << "Can't Change Lanes: " << state << endl;
+      /* cout << "Can't Change Lanes: " << state << endl; */
       return this->keep_lane_trajectory(predictions);
     }
   }
 
-  vector<double> next_lane_kinematics = get_lane_kinematics(*this, next_lane, predictions);
+  vector<double> next_lane_kinematics = get_lane_kinematics(*this, next_lane, 20.0, predictions);
   double speed = next_lane_kinematics[0];
 
   return Vehicle(this->id, next_lane, this->d, this->s, this->x, this->y, this->yaw, speed, state);

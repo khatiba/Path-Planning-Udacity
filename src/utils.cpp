@@ -197,12 +197,12 @@ vector<Vehicle> get_vehicle_behind(const Vehicle & vehicle, int lane, vector<Veh
   return vehicle_behind;
 }
 
-vector<double> get_lane_kinematics(const Vehicle & vehicle, int lane, vector<Vehicle> predictions) {
+vector<double> get_lane_kinematics(const Vehicle & vehicle, int lane, double look_ahead_dist, vector<Vehicle> predictions) {
   double lane_speed = speed_limit;
 
   vector<Vehicle> vehicle_ahead = get_vehicle_ahead(vehicle, lane, predictions);
   if (vehicle_ahead.size() > 0) {
-    if (vehicle_ahead[0].s - vehicle.s < 30) { // slow down closer/farther from vehicle
+    if (vehicle_ahead[0].s - vehicle.s < look_ahead_dist) { // slow down closer/farther from vehicle
       lane_speed = 0.95 * vehicle_ahead[0].speed; // slightly slower than leading vehicle
     }
   }
